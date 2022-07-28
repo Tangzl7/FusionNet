@@ -63,17 +63,6 @@ def conv_operator(filename, in_channels=1):
 
     return img, out
 
-def plt_show(windowsname, img, channels=1):
-    plt.figure(windowsname)
-    if channels ==1:
-        plt.imshow(img, cmap='gray')
-    elif channels == 3:
-        plt.imshow(img, )
-    else:
-        exit()
-
-    plt.axis('on')
-    plt.show()
 
 if __name__=="__main__":
     img_name = '../data/0001_rgb.jpg'

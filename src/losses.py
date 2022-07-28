@@ -22,7 +22,6 @@ class AreaEdgeLoss(nn.Module):
         if torch.cuda.is_available():
             self.sobel_kernel_x = self.sobel_kernel_x.cuda()
             self.sobel_kernel_y = self.sobel_kernel_y.cuda()
-        self.loss = DataLoss()
 
     def sobel_conv(self, img):
         edge_detect_x = F.conv2d(img, self.sobel_kernel_x.repeat(1, 3, 1, 1), padding=1)
