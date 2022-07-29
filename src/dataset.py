@@ -7,6 +7,8 @@ import numpy as np
 from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
 
+random.seed(1234)
+
 class DataLoaderTrain(Dataset):
     def __init__(self, dir):
         super(DataLoaderTrain, self).__init__()
@@ -23,15 +25,16 @@ class DataLoaderTrain(Dataset):
         rgb_path = self.rgb_files[index]
         nir_path = self.nir_files[index]
 
-        rgb = cv2.imread(rgb_path) / 255.
-        nir = cv2.imread(nir_path, 0) / 255.
+        rgb = cv2.imread(rgb_path)
+        rgb = cv2.resize(rgb, (1920, 1080))
+        rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB) / 255.
+        nir = cv2.imread(nir_path, 0)
+        nir = cv2.resize(nir, (1920, 1080)) / 255.
         high_reflection_nir = np.where(nir>=100/255., 1., 0.)
         high_reflection_bgr = 1 - high_reflection_nir
-
         rgb, nir = TF.to_tensor(rgb), TF.to_tensor(nir)
         high_reflection_bgr, high_reflection_nir = TF.to_tensor(high_reflection_bgr), TF.to_tensor(high_reflection_nir)
 
-        '''
         aug = random.randint(0, 8)
         # Data Augmentations
         if aug==1:
@@ -55,6 +58,5 @@ class DataLoaderTrain(Dataset):
         elif aug==7:
             rgb, nir = torch.rot90(rgb.flip(2),dims=(1,2)), torch.rot90(nir.flip(2),dims=(1,2))
             high_reflection_bgr, high_reflection_nir = torch.rot90(high_reflection_bgr.flip(2),dims=(1,2)), torch.rot90(high_reflection_nir.flip(2),dims=(1,2))
-        '''
 
         return rgb.float(), nir.float(), high_reflection_bgr.float(), high_reflection_nir.float()

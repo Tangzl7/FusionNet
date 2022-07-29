@@ -4,7 +4,9 @@ opt = Config('config.yml')
 
 import os
 import pdb
+import cv2
 import time
+import json
 import random
 import numpy as np
 from tqdm import tqdm
@@ -66,16 +68,22 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
         # zero grad
         for param in model.parameters():
             param.grad = None
-        # pdb.set_trace()
+
         rgb, nir = data[0].cuda(), data[1].cuda()
         high_reflection_rgb, high_reflection_nir = data[2].cuda(), data[3].cuda()
 
         out = model(rgb, nir)
-        loss = data_loss(out, rgb) + edge_loss(out, rgb, nir, high_reflection_rgb, high_reflection_nir)
-
+        loss = data_loss(out, rgb)
         loss.backward()
         optimizer.step()
         epoch_loss += loss
+
+        out1 = out.cpu()
+        out1 = torch.squeeze(out1, 0)
+        out1 = out1.detach().numpy()
+        out1 = np.transpose(out1, (1, 2, 0))
+        cv2.imwrite('./out.png', np.uint8(out1 * 255.))
+        pdb.set_trace()
 
     scheduler.step()
 
@@ -83,7 +91,4 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
     print("Epoch: {}\tTime: {:.4f}\tLoss: {:.4f}\tLearningRate {:.6f}".format(epoch, time.time()-epoch_start_time, epoch_loss, scheduler.get_lr()[0]))
     print("------------------------------------------------------------------")
 
-    torch.save({'epoch': epoch, 
-                'state_dict': model.state_dict(),
-                'optimizer' : optimizer.state_dict()
-                }, os.path.join(model_dir, "model_latest.pth")) 
+    torch.save(model.state_dict(), os.path.join(model_dir, "model_latest.pth"))

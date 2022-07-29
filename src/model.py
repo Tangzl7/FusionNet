@@ -1,8 +1,10 @@
-from turtle import forward
+import cv2
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
 
+import pdb
+import numpy as np
 from PIL import Image
 
 
@@ -136,7 +138,8 @@ class FusionNet(nn.Module):
         self.fnet = FNet(feat_conv_cnt, feat_scale_factor, out_c, kernel_size, reduction, bias, act)
         self.fnet_tail = nn.Conv2d(out_c, out_c, kernel_size, padding='same')
 
-    def forward(self, vis, nir):                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+    def forward(self, vis, nir):
+        # pdb.set_trace()
         feat_1 = self.vis_feat_extractor(vis)
         feat_2 = self.nir_feat_extractor(nir)
         fusion = self.fnet(feat_1, feat_2)
@@ -152,10 +155,16 @@ class FusionNet(nn.Module):
 
 if __name__ == '__main__':
     fusion_net = FusionNet()
-    rgb, nir = Image.open('../data/0001_rgb.jpg'), Image.open('../data/0001_nir.jpg')
+    fusion_net.load_state_dict(torch.load('../checkpoints/model_latest.pth'))
+    rgb, nir = cv2.imread('../data/rgb/0002_rgb.jpg'), cv2.imread('../data/nir/0002_nir.jpg', 0)
+    rgb = cv2.resize(rgb, (1920, 1080)) / 255.
+    nir = cv2.resize(nir, (1920, 1080)) / 255.
     rgb, nir = TF.to_tensor(rgb), TF.to_tensor(nir)
-    rgb = rgb.reshape([1, rgb.shape[0], rgb.shape[1], rgb.shape[2]])
-    nir = nir[0, :, :].reshape([1, 1, nir.shape[1], nir.shape[2]])
+    rgb, nir = torch.unsqueeze(rgb, 0), torch.unsqueeze(nir, 0)
+    # pdb.set_trace()
     print(fusion_net)
-    out = fusion_net(rgb, nir)
-    print(out.shape)
+    out = fusion_net(rgb.float(), nir.float()) * 255.
+    out = torch.squeeze(out, 0)
+    out = out.detach().numpy()
+    out = np.transpose(out, (1, 2, 0))
+    cv2.imwrite('./out.png', np.uint8(out))
