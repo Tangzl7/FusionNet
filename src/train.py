@@ -1,93 +1,114 @@
-from statistics import mode
-from config import Config
-opt = Config('config.yml')
-
 import os
+import sys
 import pdb
-import cv2
 import time
-import json
-import random
+import argparse
 import numpy as np
-from tqdm import tqdm
 
-import losses
-from model import FusionNet
+from model import DenoisyNet
 from dataset import DataLoaderTrain
-from warmup_scheduler import GradualWarmupScheduler
+from losses import DataLoss, DataWindowLoss, EdgeLoss
 
 import torch
-import torch.optim as optim
-from torch.utils.data import DataLoader
+import torch.optim
+import torchvision
+import torch.nn as nn
+from torchvision import transforms
+import torch.backends.cudnn as cudnn
 
-random.seed(1234)
-np.random.seed(1234)
-torch.manual_seed(1234)
-torch.cuda.manual_seed(1234)
 
-train_dir = opt.TRAINING.TRAIN_DIR
-model_dir = opt.TRAINING.SAVE_DIR
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        m.weight.data.normal_(0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        m.weight.data.normal_(1.0, 0.02)
+        m.bias.data.fill_(0)
 
-model = FusionNet()
-model.cuda()
 
-device_ids = [i for i in range(torch.cuda.device_count())]
-if torch.cuda.device_count() > 1:
-    print("Let's use", torch.cuda.device_count(), "GPUs!\n\n")
 
-lr = opt.OPTIM.LR_INITIAL
-start_epoch = 1
 
-######### Optimizer ###########
-optimizer = optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-8)
 
-######### Scheduler ###########
-warmup_epochs = 20
-scheduler_cosine = optim.lr_scheduler.CosineAnnealingLR(optimizer, opt.OPTIM.NUM_EPOCHS-warmup_epochs+40, eta_min=opt.OPTIM.LR_MIN)
-scheduler = GradualWarmupScheduler(optimizer, multiplier=1, total_epoch=warmup_epochs, after_scheduler=scheduler_cosine)
-scheduler.step()
+def train(config):
 
-######### Loss ###########
-data_loss = losses.DataLoss()
-edge_loss = losses.AreaEdgeLoss()
+	os.environ['CUDA_VISIBLE_DEVICES']='0'
 
-######### DataLoader ###########
-train_dataset = DataLoaderTrain(train_dir)
-train_loader = DataLoader(dataset=train_dataset, batch_size=opt.OPTIM.BATCH_SIZE, shuffle=True, num_workers=0, drop_last=False)
+	net = DenoisyNet().cuda()
 
-print('===> Start Epoch {} End Epoch {}'.format(start_epoch, opt.OPTIM.NUM_EPOCHS + 1))
-print('===> Loading datasets')
+	net.apply(weights_init)
+	if config.load_pretrain == True:
+		net.load_state_dict(torch.load(config.pretrain_dir))
+	train_dataset = DataLoaderTrain(config.images_path)
+	print(len(train_dataset))
+	
+	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config.train_batch_size, shuffle=True, num_workers=config.num_workers, pin_memory=False)
 
-for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
-    epoch_start_time = time.time()
-    epoch_loss = 0
 
-    model.train()
-    for i, data in enumerate(tqdm(train_loader), 0):
+	data_loss = DataWindowLoss()
+	edge_loss = EdgeLoss()
 
-        # zero grad
-        for param in model.parameters():
-            param.grad = None
+	optimizer = torch.optim.Adam(net.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+	
+	net.train()
 
-        rgb, nir = data[0].cuda(), data[1].cuda()
-        high_reflection_rgb, high_reflection_nir = data[2].cuda(), data[3].cuda()
+	for epoch in range(config.num_epochs):
+		for iteration, data in enumerate(train_loader):
 
-        out = model(rgb, nir)
-        loss = data_loss(out, rgb)
-        loss.backward()
-        optimizer.step()
-        epoch_loss += loss
+			l_channel, nir = data[0], data[1]
+			l_channel, nir = l_channel.cuda(), nir.cuda()
+			# pdb.set_trace()
 
-        out1 = out.cpu()
-        out1 = torch.squeeze(out1, 0)
-        out1 = out1.detach().numpy()
-        out1 = np.transpose(out1, (1, 2, 0))
-        cv2.imwrite('./out.png', np.uint8(out1 * 255.))
+			denoisy_l_channel  = net(l_channel, nir)
 
-    scheduler.step()
+			loss_data = data_loss(denoisy_l_channel, l_channel)
+			loss_edge = edge_loss(denoisy_l_channel, nir)
+			loss =  loss_data + loss_edge
 
-    print("------------------------------------------------------------------")
-    print("Epoch: {}\tTime: {:.4f}\tLoss: {:.4f}\tLearningRate {:.6f}".format(epoch, time.time()-epoch_start_time, epoch_loss, scheduler.get_lr()[0]))
-    print("------------------------------------------------------------------")
+			
+			optimizer.zero_grad()
+			loss.backward()
+			# torch.nn.utils.clip_grad_norm(net.parameters(),config.grad_clip_norm)
+			optimizer.step()
 
-    torch.save(model.state_dict(), os.path.join(model_dir, "model_latest.pth"))
+			print("epoch", epoch, "Loss at iteration", iteration+1, ":", loss_data.item(), loss_edge.item())
+	
+	torch.save(net.state_dict(), config.snapshots_folder + 'denoisy.pth') 
+
+
+
+
+if __name__ == "__main__":
+
+	parser = argparse.ArgumentParser()
+
+	# Input Parameters
+	parser.add_argument('--images_path', type=str, default="../data")
+	parser.add_argument('--lr', type=float, default=0.1)
+	parser.add_argument('--weight_decay', type=float, default=0.0000)
+	parser.add_argument('--grad_clip_norm', type=float, default=0.1)
+	parser.add_argument('--num_epochs', type=int, default=10)
+	parser.add_argument('--train_batch_size', type=int, default=1)
+	parser.add_argument('--val_batch_size', type=int, default=1)
+	parser.add_argument('--num_workers', type=int, default=0)
+	parser.add_argument('--display_iter', type=int, default=5)
+	parser.add_argument('--snapshot_iter', type=int, default=5)
+	parser.add_argument('--snapshots_folder', type=str, default="snapshots/")
+	parser.add_argument('--load_pretrain', type=bool, default= False)
+	parser.add_argument('--pretrain_dir', type=str, default= "snapshots/Epoch99.pth")
+
+	config = parser.parse_args()
+
+	if not os.path.exists(config.snapshots_folder):
+		os.mkdir(config.snapshots_folder)
+
+
+	train(config)
+
+
+
+
+
+
+
+
+	

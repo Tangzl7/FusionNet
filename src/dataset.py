@@ -25,38 +25,29 @@ class DataLoaderTrain(Dataset):
         rgb_path = self.rgb_files[index]
         nir_path = self.nir_files[index]
 
-        rgb = cv2.imread(rgb_path)
-        rgb = cv2.resize(rgb, (1520, 860))
-        rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB) / 255.
-        nir = cv2.imread(nir_path, 0)
-        nir = cv2.resize(nir, (1520, 860)) / 255.
-        high_reflection_nir = np.where(nir>=100/255., 1., 0.)
-        high_reflection_bgr = 1 - high_reflection_nir
-        rgb, nir = TF.to_tensor(rgb), TF.to_tensor(nir)
-        high_reflection_bgr, high_reflection_nir = TF.to_tensor(high_reflection_bgr), TF.to_tensor(high_reflection_nir)
+        rgb, nir = cv2.imread(rgb_path), cv2.imread(nir_path, 0)
+        # rgb = cv2.resize(rgb, (1920, 1080))
+        lab = cv2.cvtColor(rgb, cv2.COLOR_BGR2LAB) / 255.
+        l_channel = lab[:, :, 0]
+        # nir = cv2.resize(nir, (1920, 1080)) / 255.
+        nir = nir / 255.
+        l_channel, nir = TF.to_tensor(l_channel), TF.to_tensor(nir)
 
         aug = random.randint(0, 8)
         # Data Augmentations
-        if aug==1:
-            rgb, nir = rgb.flip(1), nir.flip(1)
-            high_reflection_bgr, high_reflection_nir = high_reflection_bgr.flip(1), high_reflection_nir.flip(1)
-        elif aug==2:
-            rgb, nir = rgb.flip(2), nir.flip(2)
-            high_reflection_bgr, high_reflection_nir = high_reflection_bgr.flip(2), high_reflection_nir.flip(2)
-        elif aug==3:
-            rgb, nir = torch.rot90(rgb,dims=(1,2)), torch.rot90(nir, dims=(1,2))
-            high_reflection_bgr, high_reflection_nir = torch.rot90(high_reflection_bgr,dims=(1,2)), torch.rot90(high_reflection_nir, dims=(1,2))
-        elif aug==4:
-            rgb, nir = torch.rot90(rgb,dims=(1,2), k=2), torch.rot90(nir,dims=(1,2), k=2)
-            high_reflection_bgr, high_reflection_nir = torch.rot90(high_reflection_bgr,dims=(1,2), k=2), torch.rot90(high_reflection_nir,dims=(1,2), k=2)
-        elif aug==5:
-            rgb, nir = torch.rot90(rgb,dims=(1,2), k=3), torch.rot90(nir,dims=(1,2), k=3)
-            high_reflection_bgr, high_reflection_nir = torch.rot90(high_reflection_bgr,dims=(1,2), k=3), torch.rot90(high_reflection_nir,dims=(1,2), k=3)
-        elif aug==6:
-            rgb, nir = torch.rot90(rgb.flip(1),dims=(1,2)), torch.rot90(nir.flip(1),dims=(1,2))
-            high_reflection_bgr, high_reflection_nir = torch.rot90(high_reflection_bgr.flip(1),dims=(1,2)), torch.rot90(high_reflection_nir.flip(1),dims=(1,2))
-        elif aug==7:
-            rgb, nir = torch.rot90(rgb.flip(2),dims=(1,2)), torch.rot90(nir.flip(2),dims=(1,2))
-            high_reflection_bgr, high_reflection_nir = torch.rot90(high_reflection_bgr.flip(2),dims=(1,2)), torch.rot90(high_reflection_nir.flip(2),dims=(1,2))
+        # if aug==1:
+        #     l_channel, nir = l_channel.flip(1), nir.flip(1)
+        # elif aug==2:
+        #     l_channel, nir = l_channel.flip(2), nir.flip(2)
+        # elif aug==3:
+        #     l_channel, nir = torch.rot90(l_channel,dims=(1,2)), torch.rot90(nir, dims=(1,2))
+        # elif aug==4:
+        #     l_channel, nir = torch.rot90(l_channel,dims=(1,2), k=2), torch.rot90(nir,dims=(1,2), k=2)
+        # elif aug==5:
+        #     l_channel, nir = torch.rot90(l_channel,dims=(1,2), k=3), torch.rot90(nir,dims=(1,2), k=3)
+        # elif aug==6:
+        #     l_channel, nir = torch.rot90(l_channel.flip(1),dims=(1,2)), torch.rot90(nir.flip(1),dims=(1,2))
+        # elif aug==7:
+        #     l_channel, nir = torch.rot90(l_channel.flip(2),dims=(1,2)), torch.rot90(nir.flip(2),dims=(1,2))
 
-        return rgb.float(), nir.float(), high_reflection_bgr.float(), high_reflection_nir.float()
+        return l_channel.float(), nir.float()
