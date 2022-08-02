@@ -42,7 +42,7 @@ start_epoch = 1
 optimizer = optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-8)
 
 ######### Scheduler ###########
-warmup_epochs = 3
+warmup_epochs = 20
 scheduler_cosine = optim.lr_scheduler.CosineAnnealingLR(optimizer, opt.OPTIM.NUM_EPOCHS-warmup_epochs+40, eta_min=opt.OPTIM.LR_MIN)
 scheduler = GradualWarmupScheduler(optimizer, multiplier=1, total_epoch=warmup_epochs, after_scheduler=scheduler_cosine)
 scheduler.step()
@@ -83,7 +83,6 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
         out1 = out1.detach().numpy()
         out1 = np.transpose(out1, (1, 2, 0))
         cv2.imwrite('./out.png', np.uint8(out1 * 255.))
-        pdb.set_trace()
 
     scheduler.step()
 

@@ -51,7 +51,7 @@ class FeatExtractor(nn.Module):
             modules.append(act)
             n_feat = 16 * (2 ** i)
         
-        modules.append(CABlock(n_feat, kernel_size, reduction, bias, act))
+        # modules.append(CABlock(n_feat, kernel_size, reduction, bias, act))
         self.extractor = nn.Sequential(*modules)
 
     def forward(self, x):
@@ -130,6 +130,7 @@ class FusionNet(nn.Module):
     def __init__(self, vis_c=3, nir_c=1, out_c=3, feat_conv_cnt=3, feat_scale_factor=16, coder_conv_cnt=3, scale_unet_feats=16, kernel_size=3, reduction=4, bias=False):
         super(FusionNet, self).__init__()
         act = nn.PReLU()
+        self.act = nn.PReLU()
         self.vis_feat_extractor = FeatExtractor(feat_conv_cnt, feat_scale_factor, vis_c, kernel_size, reduction, bias, act)
         self.nir_feat_extractor = FeatExtractor(feat_conv_cnt, feat_scale_factor, nir_c, kernel_size, reduction, bias, act)
         self.encoder = Encoder(coder_conv_cnt, vis_c, kernel_size, act, bias, scale_unet_feats, scale_factor=0.5)
@@ -147,6 +148,7 @@ class FusionNet(nn.Module):
         coder_out = self.encoder(vis)
         coder_out = self.decoder(coder_out)
         coder_out = self.decoder_tail(coder_out)
+        coder_out = self.act(coder_out)
 
         out = fusion + coder_out
         out = self.fnet_tail(out)

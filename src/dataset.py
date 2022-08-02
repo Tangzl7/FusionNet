@@ -26,10 +26,10 @@ class DataLoaderTrain(Dataset):
         nir_path = self.nir_files[index]
 
         rgb = cv2.imread(rgb_path)
-        rgb = cv2.resize(rgb, (1920, 1080))
+        rgb = cv2.resize(rgb, (1520, 860))
         rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB) / 255.
         nir = cv2.imread(nir_path, 0)
-        nir = cv2.resize(nir, (1920, 1080)) / 255.
+        nir = cv2.resize(nir, (1520, 860)) / 255.
         high_reflection_nir = np.where(nir>=100/255., 1., 0.)
         high_reflection_bgr = 1 - high_reflection_nir
         rgb, nir = TF.to_tensor(rgb), TF.to_tensor(nir)
