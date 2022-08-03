@@ -17,13 +17,13 @@ from torchvision import transforms
 import torch.backends.cudnn as cudnn
 
 
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        m.weight.data.normal_(0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        m.weight.data.normal_(1.0, 0.02)
-        m.bias.data.fill_(0)
+# def weights_init(m):
+#     classname = m.__class__.__name__
+#     if classname.find('Conv') != -1:
+#         m.weight.data.normal_(0.0, 0.02)
+#     elif classname.find('BatchNorm') != -1:
+#         m.weight.data.normal_(1.0, 0.02)
+#         m.bias.data.fill_(0)
 
 
 
@@ -35,7 +35,7 @@ def train(config):
 
 	net = DenoisyNet().cuda()
 
-	net.apply(weights_init)
+	# net.apply(weights_init)
 	if config.load_pretrain == True:
 		net.load_state_dict(torch.load(config.pretrain_dir))
 	train_dataset = DataLoaderTrain(config.images_path)
@@ -58,19 +58,23 @@ def train(config):
 			l_channel, nir = l_channel.cuda(), nir.cuda()
 			# pdb.set_trace()
 
-			denoisy_l_channel  = net(l_channel, nir)
+			denoisy_l_channel, nir_strcut  = net(l_channel, nir)
 
 			loss_data = data_loss(denoisy_l_channel, l_channel)
 			loss_edge = edge_loss(denoisy_l_channel, nir)
+			loss_edge_nir = edge_loss(nir_strcut, nir)
 			loss =  loss_data + loss_edge
 
+			optimizer.zero_grad()
+			loss_edge_nir.backward(retain_graph=True)
+			# torch.nn.utils.clip_grad_norm(net.parameters(),config.grad_clip_norm)
 			
 			optimizer.zero_grad()
 			loss.backward()
-			# torch.nn.utils.clip_grad_norm(net.parameters(),config.grad_clip_norm)
+			torch.nn.utils.clip_grad_norm(net.parameters(),config.grad_clip_norm)
 			optimizer.step()
 
-			print("epoch", epoch, "Loss at iteration", iteration+1, ":", loss_data.item(), loss_edge.item())
+			print("epoch", epoch, "Loss at iteration", iteration+1, ":", loss_data.item(), loss_edge.item(), loss_edge_nir.item())
 	
 	torch.save(net.state_dict(), config.snapshots_folder + 'denoisy.pth') 
 
@@ -83,10 +87,10 @@ if __name__ == "__main__":
 
 	# Input Parameters
 	parser.add_argument('--images_path', type=str, default="../data")
-	parser.add_argument('--lr', type=float, default=0.1)
-	parser.add_argument('--weight_decay', type=float, default=0.0000)
+	parser.add_argument('--lr', type=float, default=0.0001)
+	parser.add_argument('--weight_decay', type=float, default=0.00001)
 	parser.add_argument('--grad_clip_norm', type=float, default=0.1)
-	parser.add_argument('--num_epochs', type=int, default=10)
+	parser.add_argument('--num_epochs', type=int, default=4)
 	parser.add_argument('--train_batch_size', type=int, default=1)
 	parser.add_argument('--val_batch_size', type=int, default=1)
 	parser.add_argument('--num_workers', type=int, default=0)

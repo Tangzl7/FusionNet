@@ -11,12 +11,16 @@ import pdb
 import numpy as np
 from PIL import Image
 
-class NirExtractor(nn.Module):
-    def __init__(self, in_channels=1, out_channels=32, feats=32, kernel_size=3, bias=True):
-        super(NirExtractor, self).__init__()
-        self.act = nn.PReLU()
+class NirStructExtractor(nn.Module):
+    def __init__(self, in_channels=1, out_channels=1, feats=32, kernel_size=3, bias=True):
+        super(NirStructExtractor, self).__init__()
+        self.act = nn.ReLU()
         self.modules = []
         self.modules.append(nn.Conv2d(in_channels, feats, kernel_size, padding='same', bias=True))
+        self.modules.append(self.act)
+        self.modules.append(nn.Conv2d(feats, 2*feats, kernel_size, padding='same', bias=True))
+        self.modules.append(self.act)
+        self.modules.append(nn.Conv2d(2*feats, feats, kernel_size, padding='same', bias=True))
         self.modules.append(self.act)
         self.modules.append(nn.Conv2d(feats, out_channels, kernel_size, padding='same', bias=True))
         self.modules.append(self.act)
@@ -28,10 +32,8 @@ class NirExtractor(nn.Module):
 
 
 class DenoisyNet(nn.Module):
-    def __init__(self, in_channels=1, out_channels=7, feats=32, kernel_size=3, bias=True):
+    def __init__(self, in_channels=1, out_channels=5, feats=32, kernel_size=3, bias=True):
         super(DenoisyNet, self).__init__()
-        self.kernels_0 = torch.tensor([[-1, -1, -1, -1, -1], [-1, -1, -1, -1, -1], [-1, -1, 15, -1, -1], [-1, -1, -1, -1, -1], [-1, -1, -1, -1, -1]], 
-                        dtype=torch.float, requires_grad=True).view(1, 1, 5, 5)
         self.kernels_1 = torch.tensor([[-1, -1, -1], [-1, 4, -1], [-1, -1, -1]], 
                         dtype=torch.float, requires_grad=True).view(1, 1, 3, 3)
         self.kernels_2 = torch.tensor([[1]], 
@@ -42,144 +44,61 @@ class DenoisyNet(nn.Module):
                         dtype=torch.float, requires_grad=True).view(1, 1, 5, 5)
         self.kernels_5 = torch.tensor([[1/49 for j in range(7)] for i in range(7)], 
                         dtype=torch.float, requires_grad=True).view(1, 1, 7, 7)
-        self.kernels_6 = torch.tensor([[1/81 for j in range(9)] for i in range(9)], 
-                        dtype=torch.float, requires_grad=True).view(1, 1, 9, 9)
         if torch.cuda.is_available():
-            self.kernels_0 = self.kernels_0.cuda()
             self.kernels_1 = self.kernels_1.cuda()
             self.kernels_2 = self.kernels_2.cuda()
             self.kernels_3 = self.kernels_3.cuda()
             self.kernels_4 = self.kernels_4.cuda()
             self.kernels_5 = self.kernels_5.cuda()
-            self.kernels_6 = self.kernels_6.cuda()
 
-        self.nir_extractor = NirExtractor()
-
-        self.act = nn.PReLU()
+        self.act = nn.ReLU()
         self.encode_conv1 = nn.Conv2d(in_channels, feats, kernel_size, padding='same', bias=bias)
         self.encode_conv2 = nn.Conv2d(feats, feats, kernel_size, padding='same', bias=bias)
         self.encode_conv3 = nn.Conv2d(feats, feats, kernel_size, padding='same', bias=bias)
         self.decode_conv1 = nn.Conv2d(feats*2, feats, kernel_size, padding='same', bias=bias)
         self.decode_conv2 = nn.Conv2d(feats*2, feats, kernel_size, padding='same', bias=bias)
         self.decode_conv3 = nn.Conv2d(feats+in_channels, out_channels, kernel_size, padding='same', bias=bias)
+
+        self.nir_encode_conv1 = nn.Conv2d(in_channels, feats, kernel_size, padding='same', bias=bias)
+        self.nir_encode_conv2 = nn.Conv2d(feats, feats, kernel_size, padding='same', bias=bias)
+        self.nir_encode_conv3 = nn.Conv2d(feats, feats, kernel_size, padding='same', bias=bias)
+        self.nir_decode_conv1 = nn.Conv2d(feats*2, feats, kernel_size, padding='same', bias=bias)
+        self.nir_decode_conv2 = nn.Conv2d(feats*2, feats, kernel_size, padding='same', bias=bias)
+        self.nir_decode_conv3 = nn.Conv2d(feats+in_channels, out_channels, kernel_size, padding='same', bias=bias)
     
     def forward(self, x, y):
-        nir_feats = self.nir_extractor(y)
-
-        x1 = self.act(self.encode_conv1(x)) + nir_feats
+        x1 = self.act(self.encode_conv1(x))
         x2 = self.act(self.encode_conv2(x1))
         x3 = self.act(self.encode_conv3(x2))
         x4 = self.act(self.decode_conv1(torch.cat([x2, x3], 1)))
         x5 = self.act(self.decode_conv2(torch.cat([x1, x4], 1)))
-        x6 = 6 * torch.sigmoid(self.decode_conv3(torch.cat([x, x5], 1)))
-        denoisy_map = torch.round(x6)
+        x6 = torch.tanh(self.decode_conv3(torch.cat([x, x5], 1)))
+        r1, r2, r3, r4, r5 = torch.split(x6, 1, dim=1)
 
-        out_map_1_0 = F.conv2d(x, self.kernels_0, padding=2)
-        out_map_1_1 = F.conv2d(x, self.kernels_1, padding=1)
-        out_map_1_2 = F.conv2d(x, self.kernels_2, padding=0)
-        out_map_1_3 = F.conv2d(x, self.kernels_3, padding=1)
-        out_map_1_4 = F.conv2d(x, self.kernels_4, padding=2)
-        out_map_1_5 = F.conv2d(x, self.kernels_5, padding=3)
-        out_map_1_6 = F.conv2d(x, self.kernels_6, padding=4)
-        denoisy_1_0 = torch.where(denoisy_map[:, 0, :, :] == 0, out_map_1_0, x)
-        denoisy_1_1 = torch.where(denoisy_map[:, 0, :, :] == 1, out_map_1_1, denoisy_1_0)
-        denoisy_1_2 = torch.where(denoisy_map[:, 0, :, :] == 2, out_map_1_2, denoisy_1_1)
-        denoisy_1_3 = torch.where(denoisy_map[:, 0, :, :] == 3, out_map_1_3, denoisy_1_2)
-        denoisy_1_4 = torch.where(denoisy_map[:, 0, :, :] == 4, out_map_1_4, denoisy_1_3)
-        denoisy_1_5 = torch.where(denoisy_map[:, 0, :, :] == 5, out_map_1_5, denoisy_1_4)
-        denoisy_1 = torch.where(denoisy_map[:, 0, :, :] == 6, out_map_1_6, denoisy_1_5)
+        n_x1 = self.act(self.nir_encode_conv1(y))
+        n_x2 = self.act(self.nir_encode_conv2(n_x1))
+        n_x3 = self.act(self.nir_encode_conv3(n_x2))
+        n_x4 = self.act(self.nir_decode_conv1(torch.cat([n_x2, n_x3], 1)))
+        n_x5 = self.act(self.nir_decode_conv2(torch.cat([n_x1, n_x4], 1)))
+        n_x6 = torch.tanh(self.nir_decode_conv3(torch.cat([y, n_x5], 1)))
+        n_r1, n_r2, n_r3, n_r4, n_r5 = torch.split(n_x6, 1, dim=1)
 
-        out_map_2_0 = F.conv2d(denoisy_1, self.kernels_0, padding=2)
-        out_map_2_1 = F.conv2d(denoisy_1, self.kernels_1, padding=1)
-        out_map_2_2 = F.conv2d(denoisy_1, self.kernels_2, padding=0)
-        out_map_2_3 = F.conv2d(denoisy_1, self.kernels_3, padding=1)
-        out_map_2_4 = F.conv2d(denoisy_1, self.kernels_4, padding=2)
-        out_map_2_5 = F.conv2d(denoisy_1, self.kernels_5, padding=3)
-        out_map_2_6 = F.conv2d(denoisy_1, self.kernels_6, padding=4)
-        denoisy_2_0 = torch.where(denoisy_map[:, 1, :, :] == 0, out_map_2_0, denoisy_1)
-        denoisy_2_1 = torch.where(denoisy_map[:, 1, :, :] == 1, out_map_2_1, denoisy_2_0)
-        denoisy_2_2 = torch.where(denoisy_map[:, 1, :, :] == 2, out_map_2_2, denoisy_2_1)
-        denoisy_2_3 = torch.where(denoisy_map[:, 1, :, :] == 3, out_map_2_3, denoisy_2_2)
-        denoisy_2_4 = torch.where(denoisy_map[:, 1, :, :] == 4, out_map_2_4, denoisy_2_3)
-        denoisy_2_5 = torch.where(denoisy_map[:, 1, :, :] == 5, out_map_2_5, denoisy_2_4)
-        denoisy_2 = torch.where(denoisy_map[:, 1, :, :] == 6, out_map_2_6, denoisy_2_5)
+        out_map_1 = F.conv2d(x, self.kernels_1, padding=1)
+        out_map_2 = F.conv2d(x, self.kernels_2, padding=0)
+        out_map_3 = F.conv2d(x, self.kernels_3, padding=1)
+        out_map_4 = F.conv2d(x, self.kernels_4, padding=2)
+        out_map_5 = F.conv2d(x, self.kernels_5, padding=3)
 
-        out_map_3_0 = F.conv2d(denoisy_2, self.kernels_0, padding=2)
-        out_map_3_1 = F.conv2d(denoisy_2, self.kernels_1, padding=1)
-        out_map_3_2 = F.conv2d(denoisy_2, self.kernels_2, padding=0)
-        out_map_3_3 = F.conv2d(denoisy_2, self.kernels_3, padding=1)
-        out_map_3_4 = F.conv2d(denoisy_2, self.kernels_4, padding=2)
-        out_map_3_5 = F.conv2d(denoisy_2, self.kernels_5, padding=3)
-        out_map_3_6 = F.conv2d(denoisy_2, self.kernels_6, padding=4)
-        denoisy_3_0 = torch.where(denoisy_map[:, 2, :, :] == 0, out_map_3_0, denoisy_2)
-        denoisy_3_1 = torch.where(denoisy_map[:, 2, :, :] == 1, out_map_3_1, denoisy_3_0)
-        denoisy_3_2 = torch.where(denoisy_map[:, 2, :, :] == 2, out_map_3_2, denoisy_3_1)
-        denoisy_3_3 = torch.where(denoisy_map[:, 2, :, :] == 3, out_map_3_3, denoisy_3_2)
-        denoisy_3_4 = torch.where(denoisy_map[:, 2, :, :] == 4, out_map_3_4, denoisy_3_3)
-        denoisy_3_5 = torch.where(denoisy_map[:, 2, :, :] == 5, out_map_3_5, denoisy_3_4)
-        denoisy_3 = torch.where(denoisy_map[:, 2, :, :] == 6, out_map_3_6, denoisy_3_5)
+        n_out_map_1 = F.conv2d(y, self.kernels_1, padding=1)
+        n_out_map_2 = F.conv2d(y, self.kernels_2, padding=0)
+        n_out_map_3 = F.conv2d(y, self.kernels_3, padding=1)
+        n_out_map_4 = F.conv2d(y, self.kernels_4, padding=2)
+        n_out_map_5 = F.conv2d(y, self.kernels_5, padding=3)
 
-        out_map_4_0 = F.conv2d(denoisy_3, self.kernels_0, padding=2)
-        out_map_4_1 = F.conv2d(denoisy_3, self.kernels_1, padding=1)
-        out_map_4_2 = F.conv2d(denoisy_3, self.kernels_2, padding=0)
-        out_map_4_3 = F.conv2d(denoisy_3, self.kernels_3, padding=1)
-        out_map_4_4 = F.conv2d(denoisy_3, self.kernels_4, padding=2)
-        out_map_4_5 = F.conv2d(denoisy_3, self.kernels_5, padding=3)
-        out_map_4_6 = F.conv2d(denoisy_3, self.kernels_6, padding=4)
-        denoisy_4_0 = torch.where(denoisy_map[:, 3, :, :] == 0, out_map_4_0, denoisy_3)
-        denoisy_4_1 = torch.where(denoisy_map[:, 3, :, :] == 1, out_map_4_1, denoisy_4_0)
-        denoisy_4_2 = torch.where(denoisy_map[:, 3, :, :] == 2, out_map_4_2, denoisy_4_1)
-        denoisy_4_3 = torch.where(denoisy_map[:, 3, :, :] == 3, out_map_4_3, denoisy_4_2)
-        denoisy_4_4 = torch.where(denoisy_map[:, 3, :, :] == 4, out_map_4_4, denoisy_4_3)
-        denoisy_4_5 = torch.where(denoisy_map[:, 3, :, :] == 5, out_map_4_5, denoisy_4_4)
-        denoisy_4 = torch.where(denoisy_map[:, 3, :, :] == 6, out_map_4_6, denoisy_4_5)
+        nir_strcut = y - n_out_map_1 * n_r1 - n_out_map_2 * n_r2 - n_out_map_3 * n_r3 - n_out_map_4 * n_r4 - n_out_map_5 * n_r5
+        out = out_map_1 * r1 + out_map_2 * r2 + out_map_3 * r3 + out_map_4 * r4 + out_map_5 * r5 + nir_strcut
 
-        out_map_5_0 = F.conv2d(denoisy_4, self.kernels_0, padding=2)
-        out_map_5_1 = F.conv2d(denoisy_4, self.kernels_1, padding=1)
-        out_map_5_2 = F.conv2d(denoisy_4, self.kernels_2, padding=0)
-        out_map_5_3 = F.conv2d(denoisy_4, self.kernels_3, padding=1)
-        out_map_5_4 = F.conv2d(denoisy_4, self.kernels_4, padding=2)
-        out_map_5_5 = F.conv2d(denoisy_4, self.kernels_5, padding=3)
-        out_map_5_6 = F.conv2d(denoisy_4, self.kernels_6, padding=4)
-        denoisy_5_0 = torch.where(denoisy_map[:, 4, :, :] == 0, out_map_5_0, denoisy_4)
-        denoisy_5_1 = torch.where(denoisy_map[:, 4, :, :] == 1, out_map_5_1, denoisy_5_0)
-        denoisy_5_2 = torch.where(denoisy_map[:, 4, :, :] == 2, out_map_5_2, denoisy_5_1)
-        denoisy_5_3 = torch.where(denoisy_map[:, 4, :, :] == 3, out_map_5_3, denoisy_5_2)
-        denoisy_5_4 = torch.where(denoisy_map[:, 4, :, :] == 4, out_map_5_4, denoisy_5_3)
-        denoisy_5_5 = torch.where(denoisy_map[:, 4, :, :] == 5, out_map_5_5, denoisy_5_4)
-        denoisy_5 = torch.where(denoisy_map[:, 4, :, :] == 6, out_map_5_6, denoisy_5_5)
-
-        out_map_6_0 = F.conv2d(denoisy_5, self.kernels_0, padding=2)
-        out_map_6_1 = F.conv2d(denoisy_5, self.kernels_1, padding=1)
-        out_map_6_2 = F.conv2d(denoisy_5, self.kernels_2, padding=0)
-        out_map_6_3 = F.conv2d(denoisy_5, self.kernels_3, padding=1)
-        out_map_6_4 = F.conv2d(denoisy_5, self.kernels_4, padding=2)
-        out_map_6_5 = F.conv2d(denoisy_5, self.kernels_5, padding=3)
-        out_map_6_6 = F.conv2d(denoisy_5, self.kernels_6, padding=4)
-        denoisy_6_0 = torch.where(denoisy_map[:, 5, :, :] == 0, out_map_6_0, denoisy_5)
-        denoisy_6_1 = torch.where(denoisy_map[:, 5, :, :] == 1, out_map_6_1, denoisy_6_0)
-        denoisy_6_2 = torch.where(denoisy_map[:, 5, :, :] == 2, out_map_6_2, denoisy_6_1)
-        denoisy_6_3 = torch.where(denoisy_map[:, 5, :, :] == 3, out_map_6_3, denoisy_6_2)
-        denoisy_6_4 = torch.where(denoisy_map[:, 5, :, :] == 4, out_map_6_4, denoisy_6_3)
-        denoisy_6_5 = torch.where(denoisy_map[:, 5, :, :] == 5, out_map_6_5, denoisy_6_4)
-        denoisy_6 = torch.where(denoisy_map[:, 5, :, :] == 6, out_map_6_6, denoisy_6_5)
-
-        out_map_7_0 = F.conv2d(denoisy_6, self.kernels_0, padding=2)
-        out_map_7_1 = F.conv2d(denoisy_6, self.kernels_1, padding=1)
-        out_map_7_2 = F.conv2d(denoisy_6, self.kernels_2, padding=0)
-        out_map_7_3 = F.conv2d(denoisy_6, self.kernels_3, padding=1)
-        out_map_7_4 = F.conv2d(denoisy_6, self.kernels_4, padding=2)
-        out_map_7_5 = F.conv2d(denoisy_6, self.kernels_5, padding=3)
-        out_map_7_6 = F.conv2d(denoisy_6, self.kernels_6, padding=4)
-        denoisy_7_0 = torch.where(denoisy_map[:, 6, :, :] == 0, out_map_7_0, denoisy_6)
-        denoisy_7_1 = torch.where(denoisy_map[:, 6, :, :] == 1, out_map_7_1, denoisy_7_0)
-        denoisy_7_2 = torch.where(denoisy_map[:, 6, :, :] == 2, out_map_7_2, denoisy_7_1)
-        denoisy_7_3 = torch.where(denoisy_map[:, 6, :, :] == 3, out_map_7_3, denoisy_7_2)
-        denoisy_7_4 = torch.where(denoisy_map[:, 6, :, :] == 4, out_map_7_4, denoisy_7_3)
-        denoisy_7_5 = torch.where(denoisy_map[:, 6, :, :] == 5, out_map_7_5, denoisy_7_4)
-        out = torch.where(denoisy_map[:, 6, :, :] == 6, out_map_7_6, denoisy_7_5)
-
-        return out
+        return out, nir_strcut
 
 if __name__ == '__main__':
     denoisy_net = DenoisyNet().cuda()
@@ -194,11 +113,13 @@ if __name__ == '__main__':
     # pdb.set_trace()
     print(denoisy_net)
     print(l_channel.shape)
-    out = denoisy_net(l_channel.float().cuda(), nir.float().cuda()) * 255.
-    out = torch.squeeze(out, 0)
+    out, out_ = denoisy_net(l_channel.float().cuda(), nir.float().cuda())
+    out = torch.squeeze(out, 0) * 255.
     out = out.cpu().detach().numpy()
     out = np.transpose(out, (1, 2, 0))
-    cv2.imwrite('tmp.png', np.uint8(out))
+    lab *= 255.
+    lab[:, :, 0] = out[:, :, 0]
+    cv2.imwrite('tmp.png', cv2.cvtColor(np.uint8(lab), cv2.COLOR_LAB2BGR))
 '''
 class CALayer(nn.Module):
     def __init__(self, channel, reduction=16, bias=False):

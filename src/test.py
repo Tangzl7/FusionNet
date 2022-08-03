@@ -65,7 +65,7 @@ def conv_operator(filename, in_channels=1):
 
 
 if __name__=="__main__":
-    img_name = '../data/0001_rgb.jpg'
+    img_name = './tmp.png'
 
     img, y = conv_operator(img_name, 3)
     cv2.imwrite('edge.png', y)

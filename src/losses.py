@@ -48,8 +48,8 @@ class DataWindowLoss(nn.Module):
             self.window_kernel = self.window_kernel.cuda()
     
     def forward(self, x, y):
-        smooth_x = F.conv2d(x, self.window_kernel, padding=4)
-        smooth_y = F.conv2d(y, self.window_kernel, padding=4)
+        smooth_x = F.conv2d(x, self.window_kernel, padding=12)
+        smooth_y = F.conv2d(y, self.window_kernel, padding=12)
         diff = smooth_x - smooth_y
         loss = torch.mean(torch.sqrt(diff * diff))
         return loss

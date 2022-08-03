@@ -35,19 +35,19 @@ class DataLoaderTrain(Dataset):
 
         aug = random.randint(0, 8)
         # Data Augmentations
-        # if aug==1:
-        #     l_channel, nir = l_channel.flip(1), nir.flip(1)
-        # elif aug==2:
-        #     l_channel, nir = l_channel.flip(2), nir.flip(2)
-        # elif aug==3:
-        #     l_channel, nir = torch.rot90(l_channel,dims=(1,2)), torch.rot90(nir, dims=(1,2))
-        # elif aug==4:
-        #     l_channel, nir = torch.rot90(l_channel,dims=(1,2), k=2), torch.rot90(nir,dims=(1,2), k=2)
-        # elif aug==5:
-        #     l_channel, nir = torch.rot90(l_channel,dims=(1,2), k=3), torch.rot90(nir,dims=(1,2), k=3)
-        # elif aug==6:
-        #     l_channel, nir = torch.rot90(l_channel.flip(1),dims=(1,2)), torch.rot90(nir.flip(1),dims=(1,2))
-        # elif aug==7:
-        #     l_channel, nir = torch.rot90(l_channel.flip(2),dims=(1,2)), torch.rot90(nir.flip(2),dims=(1,2))
+        if aug==1:
+            l_channel, nir = l_channel.flip(1), nir.flip(1)
+        elif aug==2:
+            l_channel, nir = l_channel.flip(2), nir.flip(2)
+        elif aug==3:
+            l_channel, nir = torch.rot90(l_channel,dims=(1,2)), torch.rot90(nir, dims=(1,2))
+        elif aug==4:
+            l_channel, nir = torch.rot90(l_channel,dims=(1,2), k=2), torch.rot90(nir,dims=(1,2), k=2)
+        elif aug==5:
+            l_channel, nir = torch.rot90(l_channel,dims=(1,2), k=3), torch.rot90(nir,dims=(1,2), k=3)
+        elif aug==6:
+            l_channel, nir = torch.rot90(l_channel.flip(1),dims=(1,2)), torch.rot90(nir.flip(1),dims=(1,2))
+        elif aug==7:
+            l_channel, nir = torch.rot90(l_channel.flip(2),dims=(1,2)), torch.rot90(nir.flip(2),dims=(1,2))
 
         return l_channel.float(), nir.float()
