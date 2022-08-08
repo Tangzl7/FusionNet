@@ -102,8 +102,9 @@ class DenoisyNet(nn.Module):
 
 if __name__ == '__main__':
     denoisy_net = DenoisyNet().cuda()
-    denoisy_net.load_state_dict(torch.load('./snapshots/denoisy.pth'))
-    rgb, nir = cv2.imread('../data/rgb/0001_rgb.jpg'), cv2.imread('../data/nir/0001_nir.jpg', 0)
+    denoisy_net.eval()
+    denoisy_net.load_state_dict(torch.load('./snapshots/denoisy_.pth'))
+    rgb, nir = cv2.imread('../data/rgb/0001_rgb.jpg'), cv2.imread('../data/new_nir/0001_nir.jpg', 0)
     lab = cv2.cvtColor(rgb, cv2.COLOR_BGR2LAB)
     lab = lab / 255.
     nir = nir / 255.
@@ -119,6 +120,9 @@ if __name__ == '__main__':
     out = np.transpose(out, (1, 2, 0))
     lab *= 255.
     lab[:, :, 0] = out[:, :, 0]
+    kernel = np.ones((3, 3), np.uint8)
+    # out = cv2.dilate(out,kernel,iterations=1)
+    # cv2.imwrite('tmp.png', np.uint8(out))
     cv2.imwrite('tmp.png', cv2.cvtColor(np.uint8(lab), cv2.COLOR_LAB2BGR))
 '''
 class CALayer(nn.Module):
