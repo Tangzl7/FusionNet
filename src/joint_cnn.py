@@ -11,6 +11,7 @@ from PIL import Image
 class JointFilterCNN(nn.Module):
     def __init__(self):
         super(JointFilterCNN, self).__init__()
+        self.nir_thr = torch.nn.Parameter(torch.FloatTensor([0.4]), requires_grad=False)
         self.cnn_t, self.cnn_g, self.cnn_f = [], [], []
 
         self.cnn_t.append(nn.Conv2d(3, 96, 9, padding=2))
@@ -38,14 +39,18 @@ class JointFilterCNN(nn.Module):
     def forward(self, x, y):
         t_out = self.cnn_t(x)
         g_out = self.cnn_g(y)
+        # g_out_mask = torch.where(y >= self.nir_thr, 1., 0.)
+        # g_out = g_out * g_out_mask
         out = t_out + g_out
+        # out = torch.clamp(out, 0., 1.)
         out = self.cnn_f(out) + x
+        out = torch.clamp(out, 0., 1.)
         return out
 
 if __name__ == '__main__':
     net = JointFilterCNN()
     net.load_state_dict(torch.load('./snapshots/joint_filter_cnn.pth'))
-    bgr, nir = cv2.imread('../data/original_data/0002_rgb.jpg'), cv2.imread('../data/original_data/0002_nir.jpg', 0)
+    bgr, nir = cv2.imread('../data/original_data/0003_rgb.jpg'), cv2.imread('../data/original_data/0003_nir.jpg', 0)
     bgr, nir = TF.to_tensor(bgr / 255.), TF.to_tensor(nir / 255.)
     bgr, nir = torch.unsqueeze(bgr.float(), 0), torch.unsqueeze(nir.float(), 0)
     out = net(bgr, nir)
