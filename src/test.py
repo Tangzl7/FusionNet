@@ -56,6 +56,7 @@ def conv_operator(filename, in_channels=1):
 
     x = torch.from_numpy(img.transpose([2, 0, 1])).unsqueeze(0).float()
     dx = F.conv2d(x, avgpool.repeat(1, in_channels, 1, 1), stride=1, padding=1,)
+    print(x.shape)
     dy = F.conv2d(x, avgpool.repeat(1, in_channels, 1, 1), stride=1, padding=1,)
     out = torch.sqrt((dx * dx + dy * dy)/2)
     print(out.shape)
