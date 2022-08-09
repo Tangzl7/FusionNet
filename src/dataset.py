@@ -9,6 +9,30 @@ import torchvision.transforms.functional as TF
 
 random.seed(1234)
 
+def otsu(img):
+    img = np.uint8(255. * img)
+    hist = cv2.calcHist([img],[0],None,[256],[0,256])
+    hist = hist / (img.shape[0] * img.shape[1])
+    thr, tmp_max = -1, 0
+    for i in range(256):
+        w0, w1, u0, u1 = 0, 0, 0, 0
+        for j in range(256):
+            if i <= j:
+                w0 += hist[j]
+                u0 += hist[j] * j
+            else:
+                w1 += hist[j]
+                u1 += hist[j] * j
+        if w0 == 0 or w1 == 0:
+            continue
+        u0, u1 = u0 / w0, u1 / w1
+        var = w0 * w1 * (u0 - u1) * (u0 - u1)
+        thr = np.where(var > tmp_max, i, thr)
+        tmp_max = max(tmp_max, var)
+
+    high_reflection = np.where(img >= thr, 1., 0.)
+    return high_reflection
+
 class DataLoaderTrain(Dataset):
     def __init__(self, dir):
         super(DataLoaderTrain, self).__init__()
@@ -76,23 +100,7 @@ class DataLoaderForJFC(Dataset):
         gt_path = self.gt_files[index]
 
         rgb, nir, gt = cv2.imread(rgb_path)/255., cv2.imread(nir_path, 0)/255., cv2.imread(gt_path)/255.
-        rgb, nir, gt = TF.to_tensor(rgb), TF.to_tensor(nir), TF.to_tensor(gt)
+        nir_mask = otsu(nir)
+        rgb, nir, gt, nir_mask = TF.to_tensor(rgb), TF.to_tensor(nir), TF.to_tensor(gt), TF.to_tensor(nir_mask)
 
-        aug = random.randint(0, 8)
-        # Data Augmentations
-        # if aug==1:
-        #     l_channel, nir = l_channel.flip(1), nir.flip(1)
-        # elif aug==2:
-        #     l_channel, nir = l_channel.flip(2), nir.flip(2)
-        # elif aug==3:
-        #     l_channel, nir = torch.rot90(l_channel,dims=(1,2)), torch.rot90(nir, dims=(1,2))
-        # elif aug==4:
-        #     l_channel, nir = torch.rot90(l_channel,dims=(1,2), k=2), torch.rot90(nir,dims=(1,2), k=2)
-        # elif aug==5:
-        #     l_channel, nir = torch.rot90(l_channel,dims=(1,2), k=3), torch.rot90(nir,dims=(1,2), k=3)
-        # elif aug==6:
-        #     l_channel, nir = torch.rot90(l_channel.flip(1),dims=(1,2)), torch.rot90(nir.flip(1),dims=(1,2))
-        # elif aug==7:
-        #     l_channel, nir = torch.rot90(l_channel.flip(2),dims=(1,2)), torch.rot90(nir.flip(2),dims=(1,2))
-
-        return rgb.float(), nir.float(), gt.float()
+        return rgb.float(), nir.float(), gt.float(), nir_mask.float()

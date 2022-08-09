@@ -58,11 +58,11 @@ def train(config):
 	for epoch in range(config.num_epochs):
 		for iteration, data in enumerate(train_loader):
 
-			rgb, nir, gt = data[0], data[1], data[2]
-			rgb, nir, gt = rgb.cuda(), nir.cuda(), gt.cuda()
+			rgb, nir, gt, nir_mask = data[0], data[1], data[2], data[3]
+			rgb, nir, gt, nir_mask = rgb.cuda(), nir.cuda(), gt.cuda(), nir_mask.cuda()
 			# pdb.set_trace()
 
-			out  = net(rgb, nir)
+			out  = net(rgb, nir, nir_mask)
 
 			loss_edge = edge_loss(out, gt)
 			loss_data = data_loss(out, gt)
@@ -74,7 +74,7 @@ def train(config):
 			torch.nn.utils.clip_grad_norm(net.parameters(),config.grad_clip_norm)
 			optimizer.step()
 
-			print("epoch", epoch, "Loss at iteration", iteration+1, ":", loss.item())
+			print("epoch", epoch, "Loss at iteration", iteration+1, ":", loss_data.item(), loss_edge.item())
 			out = torch.squeeze(out, 0).cpu().detach().numpy()
 			out = np.transpose(out, (1, 2, 0)) * 255.
 			cv2.imwrite('jfc_tmp.png', np.uint8(out))
