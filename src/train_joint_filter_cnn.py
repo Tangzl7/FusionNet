@@ -6,7 +6,7 @@ import time
 import argparse
 import numpy as np
 
-from joint_cnn import JointFilterCNN
+from fusion_cnn import FusionNet
 from dataset import DataLoaderForJFC
 from losses import DataLoss, DataWindowLoss, EdgeLoss
 
@@ -20,13 +20,13 @@ import torch.autograd as autograd
 
 
 
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        m.weight.data.normal_(0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        m.weight.data.normal_(1.0, 0.02)
-        m.bias.data.fill_(0)
+# def weights_init(m):
+#     classname = m.__class__.__name__
+#     if classname.find('Conv') != -1:
+#         m.weight.data.normal_(0.0, 0.02)
+#     elif classname.find('BatchNorm') != -1:
+#         m.weight.data.normal_(1.0, 0.02)
+#         m.bias.data.fill_(0)
 
 
 
@@ -36,10 +36,10 @@ def train(config):
 
 	os.environ['CUDA_VISIBLE_DEVICES']='0'
 
-	net = JointFilterCNN().cuda()
+	net = FusionNet().cuda()
 	# net.load_state_dict(torch.load('./snapshots/denoisy_.pth'))
 
-	net.apply(weights_init)
+	# net.apply(weights_init)
 	if config.load_pretrain == True:
 		net.load_state_dict(torch.load(config.pretrain_dir))
 	train_dataset = DataLoaderForJFC(config.images_path)
@@ -50,6 +50,7 @@ def train(config):
 
 	data_loss = DataLoss()
 	edge_loss = EdgeLoss()
+	data_win_loss = DataWindowLoss()
 
 	optimizer = torch.optim.Adam(net.parameters(), lr=config.lr, weight_decay=config.weight_decay)
 	
@@ -62,19 +63,23 @@ def train(config):
 			rgb, nir, gt, nir_mask = rgb.cuda(), nir.cuda(), gt.cuda(), nir_mask.cuda()
 			# pdb.set_trace()
 
-			out  = net(rgb, nir, nir_mask)
+			out = net(rgb, nir, nir_mask)
 
+			# loss_sub_net = edge_loss(out_x, gt)
 			loss_edge = edge_loss(out, gt)
 			loss_data = data_loss(out, gt)
-			loss = 2*loss_edge + loss_data
+			loss_win_data = data_win_loss(out, gt)
+			loss = loss_edge + loss_data + loss_win_data
 			
+			# optimizer.zero_grad()
+			# loss_sub_net.backward(retain_graph=True)
+
 			optimizer.zero_grad()
-			with autograd.detect_anomaly():
-				loss.backward()
+			loss.backward()
 			torch.nn.utils.clip_grad_norm(net.parameters(),config.grad_clip_norm)
 			optimizer.step()
 
-			print("epoch", epoch, "Loss at iteration", iteration+1, ":", loss_data.item(), loss_edge.item())
+			print("epoch", epoch, "Loss at iteration", iteration+1, ":", loss_data.item(), loss_edge.item(), loss_win_data.item())
 			out = torch.squeeze(out, 0).cpu().detach().numpy()
 			out = np.transpose(out, (1, 2, 0)) * 255.
 			cv2.imwrite('jfc_tmp.png', np.uint8(out))
@@ -93,7 +98,7 @@ if __name__ == "__main__":
 	parser.add_argument('--lr', type=float, default=0.0001)
 	parser.add_argument('--weight_decay', type=float, default=0.00001)
 	parser.add_argument('--grad_clip_norm', type=float, default=0.1)
-	parser.add_argument('--num_epochs', type=int, default=25)
+	parser.add_argument('--num_epochs', type=int, default=15)
 	parser.add_argument('--train_batch_size', type=int, default=1)
 	parser.add_argument('--val_batch_size', type=int, default=1)
 	parser.add_argument('--num_workers', type=int, default=0)

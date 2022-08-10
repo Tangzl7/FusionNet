@@ -11,9 +11,9 @@ class DataLoss(nn.Module):
     def forward(self, x, y):
         # pdb.set_trace()
         diff = x - y
-        loss_0 = torch.mean(torch.sqrt(diff[:, 0, :, :] * diff[:, 0, :, :] + 1e-6))
-        loss_1 = torch.mean(torch.sqrt(diff[:, 1, :, :] * diff[:, 1, :, :] + 1e-6))
-        loss_2 = torch.mean(torch.sqrt(diff[:, 2, :, :] * diff[:, 2, :, :] + 1e-6))
+        loss_0 = torch.mean(torch.sqrt(diff[:, 0, :, :] * diff[:, 0, :, :]+1e-6))
+        loss_1 = torch.mean(torch.sqrt(diff[:, 1, :, :] * diff[:, 1, :, :]+1e-6))
+        loss_2 = torch.mean(torch.sqrt(diff[:, 2, :, :] * diff[:, 2, :, :]+1e-6))
         loss = loss_0 + loss_1 + loss_2
         return loss
 
@@ -46,16 +46,16 @@ class AreaEdgeLoss(nn.Module):
 class DataWindowLoss(nn.Module):
     def __init__(self):
         super(DataWindowLoss, self).__init__()
-        self.window_kernel = torch.tensor([[1/9 for j in range(3)] for i in range(3)], 
-                        dtype=torch.float, requires_grad=False).view(1, 1, 3, 3)
+        self.window_kernel = torch.tensor([[1/49 for j in range(7)] for i in range(7)], 
+                        dtype=torch.float, requires_grad=False).view(1, 1, 7, 7)
         if torch.cuda.is_available():
             self.window_kernel = self.window_kernel.cuda()
     
     def forward(self, x, y):
-        smooth_x = F.conv2d(x, self.window_kernel, padding=12)
-        smooth_y = F.conv2d(y, self.window_kernel, padding=12)
+        smooth_x = F.conv2d(x, self.window_kernel.repeat(1, 3, 1, 1), padding=3)
+        smooth_y = F.conv2d(y, self.window_kernel.repeat(1, 3, 1, 1), padding=3)
         diff = smooth_x - smooth_y
-        loss = torch.mean(torch.sqrt(diff * diff))
+        loss = torch.mean(torch.sqrt(diff * diff + 1e-6))
         return loss
 
 class EdgeLoss(nn.Module):
@@ -78,5 +78,5 @@ class EdgeLoss(nn.Module):
     def forward(self, x, n):
         detail_x, detail_n = self.sobel_conv(x), self.sobel_conv(n)
         diff = detail_x - detail_n
-        loss = torch.mean(torch.sqrt(diff * diff + 1e-6))
+        loss = torch.mean(torch.abs(diff))
         return loss

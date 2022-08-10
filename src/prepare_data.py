@@ -5,19 +5,19 @@ import random
 
 dir = '../data/'
 rgb_files = sorted(os.listdir(os.path.join(dir, 'rgb')))
-rgb_files = [dir + '/rgb/' + name for name in rgb_files]
+rgb_files = ['../data/original_data/0001_rgb.jpg', '../data/original_data/0002_rgb.jpg', '../data/original_data/0003_rgb.jpg']
 nir_files = sorted(os.listdir(os.path.join(dir, 'nir')))
-nir_files = [dir + '/nir/' + name for name in nir_files]
+nir_files = ['../data/original_data/0001_nir.jpg', '../data/original_data/0002_nir.jpg', '../data/original_data/0003_nir.jpg']
 gt_files = sorted(os.listdir(os.path.join(dir, 'gt')))
-gt_files = [dir + '/gt/' + name for name in gt_files]
+gt_files = ['../data/original_data/0001_gt.jpg', '../data/original_data/0002_gt.jpg', '../data/original_data/0003_gt.jpg']
 
 def random_crop(rgb, nir, gt):
-    a = 1692 - 640
-    b = 1001 - 400
+    a = 1692 - 1520
+    b = 1001 - 950
     x, y = random.randint(0, a), random.randint(0, b)
-    crop_rgb = rgb[x:x+640, y:y+400, :]
-    crop_nir = nir[x:x+640, y:y+400]
-    crop_gt = gt[x:x+640, y:y+400, :]
+    crop_rgb = rgb[x:x+1520, y:y+950, :]
+    crop_nir = nir[x:x+1520, y:y+950]
+    crop_gt = gt[x:x+1520, y:y+950, :]
     return crop_rgb, crop_nir, crop_gt
 
 def random_flip(rgb, nir, gt):
@@ -36,10 +36,10 @@ def random_rotate(rgb, nir, gt):
     return rotate_rgb, rotate_nir, rotate_gt
 
 def data_enhance():
-    index = 0
+    index = 60
     for i in range(3):
         rgb_file, nir_file, gt_file = rgb_files[i], nir_files[i], gt_files[i]
-        for j in range(10):
+        for j in range(5):
             rgb, nir, gt = cv2.imread(rgb_file), cv2.imread(nir_file), cv2.imread(gt_file)
             rgb, nir, gt = random_crop(rgb, nir, gt)
             rgb, nir, gt = random_flip(rgb, nir, gt)
