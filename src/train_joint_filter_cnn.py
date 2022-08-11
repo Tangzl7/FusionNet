@@ -66,7 +66,7 @@ def train(config):
 			out = net(rgb, nir, nir_mask)
 
 			# loss_sub_net = edge_loss(out_x, gt)
-			loss_edge = edge_loss(out, gt)
+			loss_edge = 10*edge_loss(out, gt, nir_mask)
 			loss_data = data_loss(out, gt)
 			loss_win_data = data_win_loss(out, gt)
 			loss = loss_edge + loss_data

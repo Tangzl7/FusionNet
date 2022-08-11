@@ -55,18 +55,16 @@ def conv_operator(filename, in_channels=1):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     x = torch.from_numpy(img.transpose([2, 0, 1])).unsqueeze(0).float()
-    dx = F.conv2d(x, avgpool.repeat(1, in_channels, 1, 1), stride=1, padding=1,)
-    print(x.shape)
-    dy = F.conv2d(x, avgpool.repeat(1, in_channels, 1, 1), stride=1, padding=1,)
+    dx = F.conv2d(x, sobel_x.repeat(1, in_channels, 1, 1), stride=1, padding=1,)
+    dy = F.conv2d(x, sobel_y.repeat(1, in_channels, 1, 1), stride=1, padding=1,)
     out = torch.sqrt((dx * dx + dy * dy)/2)
-    print(out.shape)
     out = out.squeeze(0).numpy().transpose(1, 2, 0)
 
     return img, dx.squeeze(0).numpy().transpose(1, 2, 0)
 
 
 if __name__=="__main__":
-    img_name = '../data/gt/0_gt.jpg'
+    img_name = '../data/original_data/0003_nir.jpg'
 
     img, y = conv_operator(img_name, 3)
-    cv2.imwrite('edge.png', y)
+    cv2.imwrite('edge3.png', y)

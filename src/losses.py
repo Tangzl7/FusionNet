@@ -75,7 +75,8 @@ class EdgeLoss(nn.Module):
         edge_detect = torch.sqrt((edge_detect_x * edge_detect_x + edge_detect_y * edge_detect_y)/2 + 1e-6)
         return edge_detect
     
-    def forward(self, x, n):
+    def forward(self, x, n, mask):
+        x, n = x * mask, n * mask
         detail_x, detail_n = self.sobel_conv(x), self.sobel_conv(n)
         diff = detail_x - detail_n
         loss = torch.mean(torch.abs(diff))
