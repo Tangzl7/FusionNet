@@ -40,14 +40,14 @@ class DeepConvWeigthNet(nn.Module):
                         dtype=torch.float).view(1, 1, 15, 15)
         self.kernels_5 = torch.tensor([[1/625 for j in range(25)] for i in range(25)], 
                         dtype=torch.float).view(1, 1, 25, 25)
-        if torch.cuda.is_available():
-            self.kernels_1 = self.kernels_1.cuda()
-            self.kernels_2 = self.kernels_2.cuda()
-            self.kernels_3 = self.kernels_3.cuda()
-            self.kernels_4 = self.kernels_4.cuda()
-            self.kernels_5 = self.kernels_5.cuda()
+        # if torch.cuda.is_available():
+        #     self.kernels_1 = self.kernels_1.cuda()
+        #     self.kernels_2 = self.kernels_2.cuda()
+        #     self.kernels_3 = self.kernels_3.cuda()
+        #     self.kernels_4 = self.kernels_4.cuda()
+        #     self.kernels_5 = self.kernels_5.cuda()
         
-        self.module_body, self.module_head_1, self.module_head_2, self.module_head_3, self.module_head_4 = [], [], [], [], []
+        self.module_body, self.module_head_1, self.module_head_2, self.module_head_3 = [], [], [], []
         self.module_body.append(nn.Conv2d(3, 32, 3, padding='same'))
         self.module_body.append(nn.PReLU())
         self.module_body.append(nn.Conv2d(32, 64, 3, padding='same'))
@@ -67,14 +67,10 @@ class DeepConvWeigthNet(nn.Module):
         self.module_head_3.append(CALayer(5))
         self.module_head_3.append(nn.Softmax2d())
 
-        self.module_head_4.append(nn.Conv2d(32, 3, 3, padding='same'))
-        self.module_head_4.append(CALayer(3))
-
         self.module_body = nn.Sequential(*self.module_body)
         self.module_head_1 = nn.Sequential(*self.module_head_1)
         self.module_head_2 = nn.Sequential(*self.module_head_2)
         self.module_head_3 = nn.Sequential(*self.module_head_3)
-        self.module_head_4 = nn.Sequential(*self.module_head_4)
         
     def forward(self, x):
         # pdb.set_trace()
@@ -82,34 +78,32 @@ class DeepConvWeigthNet(nn.Module):
         head_out_1 = self.module_head_1(body_out)
         head_out_2 = self.module_head_2(body_out)
         head_out_3 = self.module_head_3(body_out)
-        head_out_4 = self.module_head_4(body_out)
         h1_r1, h1_r2, h1_r3, h1_r4, h1_r5 = torch.split(head_out_1, 1, dim=1)
         h2_r1, h2_r2, h2_r3, h2_r4, h2_r5 = torch.split(head_out_2, 1, dim=1)
         h3_r1, h3_r2, h3_r3, h3_r4, h3_r5 = torch.split(head_out_3, 1, dim=1)
-        bias_1, bias_2, bias_3 = torch.split(head_out_4, 1, dim=1)
 
         conv_map_1_1 = F.conv2d(x, self.kernels_1.repeat(3, 1, 1, 1), padding=1, groups=3)
         conv_map_1_2 = F.conv2d(x, self.kernels_2.repeat(3, 1, 1, 1), padding=0, groups=3)
         conv_map_1_3 = F.conv2d(x, self.kernels_3.repeat(3, 1, 1, 1), padding=2, groups=3)
         conv_map_1_4 = F.conv2d(x, self.kernels_4.repeat(3, 1, 1, 1), padding=7, groups=3)
         conv_map_1_5 = F.conv2d(x, self.kernels_5.repeat(3, 1, 1, 1), padding=12, groups=3)
-        out_1 = h1_r1 * conv_map_1_1 + h1_r2 * conv_map_1_2 + h1_r3 * conv_map_1_3 + h1_r4 * conv_map_1_4 + h1_r5 * conv_map_1_5 - bias_1
+        out_1 = h1_r1 * conv_map_1_1 + h1_r2 * conv_map_1_2 + h1_r3 * conv_map_1_3 + h1_r4 * conv_map_1_4 + h1_r5 * conv_map_1_5
 
         conv_map_2_1 = F.conv2d(out_1, self.kernels_1.repeat(3, 1, 1, 1), padding=1, groups=3)
         conv_map_2_2 = F.conv2d(out_1, self.kernels_2.repeat(3, 1, 1, 1), padding=0, groups=3)
         conv_map_2_3 = F.conv2d(out_1, self.kernels_3.repeat(3, 1, 1, 1), padding=2, groups=3)
         conv_map_2_4 = F.conv2d(out_1, self.kernels_4.repeat(3, 1, 1, 1), padding=7, groups=3)
         conv_map_2_5 = F.conv2d(out_1, self.kernels_5.repeat(3, 1, 1, 1), padding=12, groups=3)
-        out_2 = h2_r1 * conv_map_2_1 + h2_r2 * conv_map_2_2 + h2_r3 * conv_map_2_3 + h2_r4 * conv_map_2_4 + h2_r5 * conv_map_2_5 - bias_2
+        out_2 = h2_r1 * conv_map_2_1 + h2_r2 * conv_map_2_2 + h2_r3 * conv_map_2_3 + h2_r4 * conv_map_2_4 + h2_r5 * conv_map_2_5
 
         conv_map_3_1 = F.conv2d(out_2, self.kernels_1.repeat(3, 1, 1, 1), padding=1, groups=3)
         conv_map_3_2 = F.conv2d(out_2, self.kernels_2.repeat(3, 1, 1, 1), padding=0, groups=3)
         conv_map_3_3 = F.conv2d(out_2, self.kernels_3.repeat(3, 1, 1, 1), padding=2, groups=3)
         conv_map_3_4 = F.conv2d(out_2, self.kernels_4.repeat(3, 1, 1, 1), padding=7, groups=3)
         conv_map_3_5 = F.conv2d(out_2, self.kernels_5.repeat(3, 1, 1, 1), padding=12, groups=3)
-        out_3 = h3_r1 * conv_map_3_1 + h3_r2 * conv_map_3_2 + h3_r3 * conv_map_3_3 + h3_r4 * conv_map_3_4 + h3_r5 * conv_map_3_5 - bias_3
+        out_3 = h3_r1 * conv_map_3_1 + h3_r2 * conv_map_3_2 + h3_r3 * conv_map_3_3 + h3_r4 * conv_map_3_4 + h3_r5 * conv_map_3_5
 
-        return x - out_3
+        return out_3
 
 
 class NirFeatExtrator(nn.Module):
@@ -146,7 +140,7 @@ class FusionNet(nn.Module):
     def forward(self, x, y, mask):
         x_out = self.conv_weight_net(x)
         y_out = self.nir_feat_extractor(y, mask)
-        fusion = x - x_out + y_out
+        fusion = x_out + y_out
         # fusion = self.fusion_net(fusion)
         # out = fusion + x_out
         out = torch.clamp(fusion, 0., 1.)

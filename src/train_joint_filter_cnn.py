@@ -69,7 +69,7 @@ def train(config):
 			loss_edge = edge_loss(out, gt)
 			loss_data = data_loss(out, gt)
 			loss_win_data = data_win_loss(out, gt)
-			loss = loss_edge + loss_data + loss_win_data
+			loss = loss_edge + loss_data
 			
 			# optimizer.zero_grad()
 			# loss_sub_net.backward(retain_graph=True)
