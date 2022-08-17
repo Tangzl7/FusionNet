@@ -49,11 +49,11 @@ class DeepConvWeigthNet(nn.Module):
                         dtype=torch.float).view(1, 1, 15, 15)
         self.kernels_4 = torch.tensor([[1/625 for j in range(25)] for i in range(25)], 
                         dtype=torch.float).view(1, 1, 25, 25)
-        # if torch.cuda.is_available():
-        #     self.kernels_1 = self.kernels_1.cuda()
-        #     self.kernels_2 = self.kernels_2.cuda()
-        #     self.kernels_3 = self.kernels_3.cuda()
-        #     self.kernels_4 = self.kernels_4.cuda()
+        if torch.cuda.is_available():
+            self.kernels_1 = self.kernels_1.cuda()
+            self.kernels_2 = self.kernels_2.cuda()
+            self.kernels_3 = self.kernels_3.cuda()
+            self.kernels_4 = self.kernels_4.cuda()
         
         self.module_body, self.module_head_1, self.module_head_2, self.module_head_3 = [], [], [], []
         self.module_body.append(nn.Conv2d(3, 32, 3, padding='same'))
@@ -81,10 +81,6 @@ class DeepConvWeigthNet(nn.Module):
         self.module_head_3 = nn.Sequential(*self.module_head_3)
         
     def forward(self, x):
-        # pdb.set_trace()
-        # down_sample = Sample(x.shape[2]//8, x.shape[3]//8)
-        # up_sample = Sample(x.shape[2], x.shape[3])
-        # x = down_sample(x)
         body_out = self.module_body(x)
         head_out_1 = self.module_head_1(body_out)
         head_out_2 = self.module_head_2(body_out)
@@ -111,9 +107,84 @@ class DeepConvWeigthNet(nn.Module):
         conv_map_3_4 = F.conv2d(out_2, self.kernels_4.repeat(3, 1, 1, 1), padding=12, groups=3)
         out_3 = h3_r1 * conv_map_3_1 + h3_r2 * conv_map_3_2 + h3_r3 * conv_map_3_3 + h3_r4 * conv_map_3_4
 
-        # out = up_sample(out_3)
-
         return out_3
+
+
+class BasicBlock(nn.Module):
+    def __init__(self,in_channels,out_channels,stride=[1,1],padding=1) -> None:
+        super(BasicBlock, self).__init__()
+        self.layer = nn.Sequential(
+            nn.Conv2d(in_channels,out_channels,kernel_size=3,stride=stride[0],padding=padding,bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels,out_channels,kernel_size=3,stride=stride[1],padding=padding,bias=False),
+            nn.BatchNorm2d(out_channels)
+        )
+
+        self.shortcut = nn.Sequential()
+        if stride[0] != 1 or in_channels != out_channels:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride[0], bias=False),
+                nn.BatchNorm2d(out_channels)
+            )
+
+    def forward(self, x):
+        out = self.layer(x)
+        out += self.shortcut(x)
+        out = F.relu(out)
+        return out
+
+
+class SmoothingNet(nn.Module):
+    def __init__(self, BasicBlock):
+        super(SmoothingNet, self).__init__()
+        self.in_channels = 64
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(3,64,kernel_size=3,stride=1,padding=1,bias=False),
+            nn.BatchNorm2d(64)
+        )
+
+
+        self.conv2 = self._make_layer(BasicBlock,64,[[1,1],[1,1]])
+
+        # conv3_x
+        self.conv3 = self._make_layer(BasicBlock,128,[[1,1],[1,1]])
+
+        # conv4_x
+        self.conv4 = self._make_layer(BasicBlock,256,[[1,1],[1,1]])
+
+        # conv5_x
+        self.conv5 = self._make_layer(BasicBlock,512,[[1,1],[1,1]])
+
+        self.conv6 = nn.Sequential(
+            nn.Conv2d(512, 64, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(64)
+        )
+
+        self.tail = nn.Sequential(
+            nn.Conv2d(64, 32, kernel_size=3, padding=1, bias=False),
+            nn.ReLU(),
+            nn.Conv2d(32, 3, kernel_size=3, padding=1, bias=False)
+        )
+
+    def _make_layer(self, block, out_channels, strides):
+        layers = []
+        for stride in strides:
+            layers.append(block(self.in_channels, out_channels, stride))
+            self.in_channels = out_channels
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        out_1 = self.conv1(x)
+        out = self.conv2(out_1)
+        out = self.conv3(out)
+        out = self.conv4(out)
+        out = self.conv5(out)
+        out = self.conv6(out) + out_1
+        out = self.tail(out)
+
+        return out
 
 
 class NirFeatExtrator(nn.Module):
@@ -137,6 +208,7 @@ class FusionNet(nn.Module):
     def __init__(self):
         super(FusionNet, self).__init__()
         self.conv_weight_net = DeepConvWeigthNet()
+        self.smoothing_net = SmoothingNet(BasicBlock)
         self.nir_feat_extractor = NirFeatExtrator()
 
         self.fusion_net = []
@@ -148,23 +220,24 @@ class FusionNet(nn.Module):
         self.fusion_net = nn.Sequential(*self.fusion_net)
 
     def forward(self, x, y, mask):
-        x_out = self.conv_weight_net(x)
-        y_out = self.nir_feat_extractor(y, mask)
-        fusion = x_out + y_out
+        denoised = self.conv_weight_net(x)
+        smoothing = self.smoothing_net(denoised)
+        nir_detail = self.nir_feat_extractor(y, mask)
+        fusion = smoothing + nir_detail
         # fusion = self.fusion_net(fusion)
         # out = fusion + x_out
         out = torch.clamp(fusion, 0., 1.)
-        return out
+        return  denoised, smoothing, out
 
 
 if __name__=="__main__":
     net = FusionNet()
-    net.load_state_dict(torch.load('./snapshots/joint_filter_cnn.pth'))
+    # net.load_state_dict(torch.load('./snapshots/joint_filter_cnn.pth'))
     bgr, nir = cv2.imread('../data/original_data/0003_rgb.jpg') / 255., cv2.imread('../data/original_data/0003_nir.jpg', 0) / 255.
     nir_mask = TF.to_tensor(otsu(nir))
     bgr, nir = TF.to_tensor(bgr), TF.to_tensor(nir)
     bgr, nir, nir_mask = torch.unsqueeze(bgr.float(), 0), torch.unsqueeze(nir.float(), 0), torch.unsqueeze(nir_mask.float(), 0)
-    out = net(bgr, nir, nir_mask)
+    _, _, out = net(bgr, nir, nir_mask)
     out = torch.squeeze(out, 0).detach().numpy()
     out = np.transpose(out, (1, 2, 0)) * 255.
     out = np.clip(out, 0, 255)

@@ -1,4 +1,6 @@
+from tkinter.messagebox import NO
 import cv2
+import pdb
 import torch
 import numpy as np
 from torch import nn
@@ -42,20 +44,23 @@ sobel_x = torch.tensor([[-1, -2, -1],
 sobel_y = torch.tensor([[-1, 0, 1],
                         [-2, 0, 2],
                         [-1, 0, 1]], dtype=torch.float, requires_grad=False).view(1, 1, 3, 3)
-laplace = torch.tensor([[0, 1, 0],
-                        [1, -4, 1],
-                        [0, 1, 0]], dtype=torch.float, requires_grad=False).view(1, 1, 3, 3)
+laplace = torch.tensor([[-1, -1, -1],
+                        [-1, 8, -1],
+                        [-1, -1, -1]], dtype=torch.float, requires_grad=False).view(1, 1, 3, 3)
 avgpool = torch.tensor([[1/9, 1/9, 1/9],
                          [1/9, 1/9, 1/9],
                          [1/9, 1/9, 1/9]], dtype=torch.float, requires_grad=False).view(1, 1, 3, 3)
+tmp_kernel = torch.tensor([[-1 for i in range(21)] for j in range(21)], dtype=torch.float, requires_grad=False)
+tmp_kernel[10][10] = 440
+tmp_kernel = tmp_kernel.view(1, 1, 21, 21)
 
 def conv_operator(filename, in_channels=1):
-    img = cv2.imread(filename, 1)
+    img = cv2.imread(filename)
 
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     x = torch.from_numpy(img.transpose([2, 0, 1])).unsqueeze(0).float()
-    dx = F.conv2d(x, sobel_x.repeat(1, in_channels, 1, 1), stride=1, padding=1,)
+    dx = F.conv2d(x, tmp_kernel.repeat(1, in_channels, 1, 1), stride=1, padding=10,)
     dy = F.conv2d(x, sobel_y.repeat(1, in_channels, 1, 1), stride=1, padding=1,)
     out = torch.sqrt((dx * dx + dy * dy)/2)
     out = out.squeeze(0).numpy().transpose(1, 2, 0)
@@ -67,4 +72,11 @@ if __name__=="__main__":
     img_name = '../data/original_data/0003_nir.jpg'
 
     img, y = conv_operator(img_name, 3)
-    cv2.imwrite('edge3.png', y)
+    cv2.imwrite('edge5.png', y)
+    # pdb.set_trace()
+    # x = torch.arange(0, 1*1*5*5).float()
+    # x = x.view(5,5)
+    # print(x[None, None, :, :])
+    # img_open = F.unfold(x[None, None, :, :], kernel_size=5, padding=1)
+    # # out = img_open[0] - img_open[0][:, 4:5]
+    # print(img_open[0] - img_open[0][:,4:5])
