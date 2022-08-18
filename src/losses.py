@@ -11,10 +11,7 @@ class DataLoss(nn.Module):
     def forward(self, x, y):
         # pdb.set_trace()
         diff = x - y
-        loss_0 = torch.mean(torch.sqrt(diff[:, 0, :, :] * diff[:, 0, :, :]+1e-6))
-        loss_1 = torch.mean(torch.sqrt(diff[:, 1, :, :] * diff[:, 1, :, :]+1e-6))
-        loss_2 = torch.mean(torch.sqrt(diff[:, 2, :, :] * diff[:, 2, :, :]+1e-6))
-        loss = loss_0 + loss_1 + loss_2
+        loss = torch.mean(diff * diff)
         return loss
 
 class AreaEdgeLoss(nn.Module):
@@ -69,14 +66,14 @@ class EdgeLoss(nn.Module):
             self.sobel_kernel_x = self.sobel_kernel_x.cuda()
             self.sobel_kernel_y = self.sobel_kernel_y.cuda()
 
-    def sobel_conv(self, img):
-        edge_detect_x = F.conv2d(img, self.sobel_kernel_x.repeat(1, 3, 1, 1), padding=1)
-        edge_detect_y = F.conv2d(img, self.sobel_kernel_y.repeat(1, 3, 1, 1), padding=1)
+    def sobel_conv(self, img, channel):
+        edge_detect_x = F.conv2d(img, self.sobel_kernel_x.repeat(1, channel, 1, 1), padding=1)
+        edge_detect_y = F.conv2d(img, self.sobel_kernel_y.repeat(1, channel, 1, 1), padding=1)
         edge_detect = torch.sqrt((edge_detect_x * edge_detect_x + edge_detect_y * edge_detect_y)/2 + 1e-6)
         return edge_detect
     
-    def forward(self, x, n, mask):
-        detail_x, detail_n = self.sobel_conv(x), self.sobel_conv(n)
+    def forward(self, x, n, mask, channel=3):
+        detail_x, detail_n = self.sobel_conv(x, channel), self.sobel_conv(n, channel)
         detail_x, detail_n = detail_x * mask, detail_n * mask
         diff = detail_x - detail_n
         loss = torch.sum(torch.abs(diff)) / torch.sum(mask)
@@ -86,21 +83,17 @@ class EdgeLoss(nn.Module):
 class SmoothingLoss(nn.Module):
     def __init__(self):
         super(SmoothingLoss, self).__init__()
-        self.smoothing_kernel = torch.tensor([[-1 for i in range(21)] for j in range(21)], dtype=torch.float, requires_grad=False)
-        self.smoothing_kernel[10][10] = 440
-        self.smoothing_kernel = self.smoothing_kernel.view(1, 1, 21, 21)
+        self.smoothing_kernel = torch.tensor([[-1 for i in range(9)] for j in range(9)], dtype=torch.float, requires_grad=False)
+        self.smoothing_kernel[4][4] = 80
+        self.smoothing_kernel = self.smoothing_kernel.view(1, 1, 9, 9)
         if torch.cuda.is_available():
             self.smoothing_kernel = self.smoothing_kernel.cuda()
 
-    def sobel_conv(self, img):
-        edge_detect_x = F.conv2d(img, self.sobel_kernel_x.repeat(1, 3, 1, 1), padding=1)
-        edge_detect_y = F.conv2d(img, self.sobel_kernel_y.repeat(1, 3, 1, 1), padding=1)
-        edge_detect = torch.sqrt((edge_detect_x * edge_detect_x + edge_detect_y * edge_detect_y)/2 + 1e-6)
-        return edge_detect
-    
-    def forward(self, x, y, mask):
-        x_out = F.conv2d(x, self.smoothing_kernel.repeat(1, 3, 1, 1), padding=10)
-        y_out = F.conv2d(y, self.smoothing_kernel.repeat(1, 3, 1, 1), padding=10)
-        x_out, y_out = x_out * mask, y_out * mask
-        loss = torch.sum(torch.abs(x_out - y_out)) / torch.sum(mask)
+    def forward(self, x, gt, channel=3):
+        x_out = F.conv2d(x, self.smoothing_kernel.repeat(1, channel, 1, 1), padding=4)
+        gt_out = F.conv2d(gt, self.smoothing_kernel.repeat(1, channel, 1, 1), padding=4)
+        weight = 1 - torch.max(gt, dim=1).values
+        x_out = x_out * weight
+        gt_out = gt_out * weight
+        loss = torch.mean(torch.abs(x_out - gt_out))
         return loss

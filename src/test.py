@@ -69,10 +69,12 @@ def conv_operator(filename, in_channels=1):
 
 
 if __name__=="__main__":
-    img_name = '../data/original_data/0003_nir.jpg'
+    img_name = '../data/rgb/7_rgb.jpg'
+    img_name2 = '../data/gt/22_gt.jpg'
 
-    img, y = conv_operator(img_name, 3)
-    cv2.imwrite('edge5.png', y)
+    img1 = cv2.imread(img_name) / 255.
+    img1 = np.max(img1) - np.max(img1, axis=-1)
+    cv2.imwrite('tmp.jpg', np.uint8(img1 * 255.))
     # pdb.set_trace()
     # x = torch.arange(0, 1*1*5*5).float()
     # x = x.view(5,5)
