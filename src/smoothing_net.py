@@ -163,13 +163,14 @@ def generate_data():
 if __name__=="__main__":
     net = SmoothingNet(False)
     net.load_state_dict(torch.load('./snapshots/smoothing_cnn.pth'))
-    bgr, nir = cv2.imread('../data/original_data/0001_rgb.jpg') / 255., cv2.imread('../data/original_data/0001_nir.jpg', 0) / 255.
-    nir_mask = TF.to_tensor(otsu(nir))
-    bgr, nir = TF.to_tensor(bgr), TF.to_tensor(nir)
-    bgr, nir, nir_mask = torch.unsqueeze(bgr.float(), 0), torch.unsqueeze(nir.float(), 0), torch.unsqueeze(nir_mask.float(), 0)
-    _, out = net(bgr, nir, nir_mask)
-    out = torch.squeeze(out, 0).detach().numpy()
-    out = np.transpose(out, (1, 2, 0)) * 255.
-    out = np.clip(out, 0, 255)
-    cv2.imwrite('smt_tmp.png', np.uint8(out))
+    bgr, nir = cv2.imread('../data/rgb/21_rgb.jpg') / 255., cv2.imread('../data/nir/21_nir.jpg', 0) / 255.
+    print(bgr.shape)
+    # nir_mask = TF.to_tensor(otsu(nir))
+    # bgr, nir = TF.to_tensor(bgr), TF.to_tensor(nir)
+    # bgr, nir, nir_mask = torch.unsqueeze(bgr.float(), 0), torch.unsqueeze(nir.float(), 0), torch.unsqueeze(nir_mask.float(), 0)
+    # _, out = net(bgr, nir, nir_mask)
+    # out = torch.squeeze(out, 0).detach().numpy()
+    # out = np.transpose(out, (1, 2, 0)) * 255.
+    # out = np.clip(out, 0, 255)
+    # cv2.imwrite('smt_tmp.png', np.uint8(out))
 

@@ -1,5 +1,6 @@
 import os
 import cv2
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -132,22 +133,39 @@ class FusionNet(nn.Module):
         self.conv_weight_net = DeepConvWeigthNet(cuda_using)
         self.nir_feat_extractor = NirFeatExtrator()
 
-    def forward(self, x, y, mask):
+        self.fusion = []
+        self.fusion.append(nn.Conv2d(1, 1, 7, padding='same'))
+        self.fusion.append(nn.PReLU())
+        self.fusion.append(nn.Conv2d(1, 1, 5, padding='same'))
+        self.fusion.append(nn.PReLU())
+        self.fusion.append(nn.Conv2d(1, 1, 3, padding='same'))
+        self.fusion.append(nn.ReLU())
+        self.fusion = nn.Sequential(*self.fusion)
+
+    def forward(self, x, y, mask, infer_flag=False):
         denoised = self.conv_weight_net(x)
         nir_detail = self.nir_feat_extractor(y, mask)
-        fusion = denoised + nir_detail
+        if infer_flag:
+            fusion = denoised + 2*nir_detail
+        else:
+            fusion = denoised + nir_detail
+        # fusion = denoised + self.fusion(fusion)
         out = torch.clamp(fusion, 0., 1.)
         return  denoised, out
 
 if __name__=="__main__":
-    net = FusionNet(False)
+    net = FusionNet().cuda()
     net.load_state_dict(torch.load('./snapshots/fusion_cnn.pth'))
     rgb, nir = cv2.imread('./base_1.png'), cv2.imread('../data/original_data/0001_nir.jpg', 0) / 255.
     bgr = cv2.cvtColor(rgb, cv2.COLOR_BGR2LAB)[:, :, 0] / 255.
     nir_mask = TF.to_tensor(otsu(nir))
     bgr, nir = TF.to_tensor(bgr), TF.to_tensor(nir)
     bgr, nir, nir_mask = torch.unsqueeze(bgr.float(), 0), torch.unsqueeze(nir.float(), 0), torch.unsqueeze(nir_mask.float(), 0)
-    _, out = net(bgr, nir, nir_mask)
+    bgr, nir, nir_mask = bgr.cuda(), nir.cuda(), nir_mask.cuda()
+    for i in range(40):
+        start = time.time()
+        _, out = net(bgr, nir, nir_mask, True)
+        print(time.time()-start)
     out = torch.squeeze(out, 0).detach().numpy()
     out = np.transpose(out, (1, 2, 0)) * 255.
     out = np.clip(out, 0, 255)

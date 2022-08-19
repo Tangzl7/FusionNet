@@ -74,9 +74,9 @@ class EdgeLoss(nn.Module):
     
     def forward(self, x, n, mask, channel=3):
         detail_x, detail_n = self.sobel_conv(x, channel), self.sobel_conv(n, channel)
-        detail_x, detail_n = detail_x * mask, detail_n * mask
+        # detail_x, detail_n = detail_x * mask, detail_n * mask
         diff = detail_x - detail_n
-        loss = torch.sum(torch.abs(diff)) / torch.sum(mask)
+        loss = torch.mean(torch.abs(diff))
         return loss
 
 

@@ -51,7 +51,7 @@ def train(config):
 
 			denoise, out = net(l, nir, nir_mask)
 
-			loss_edge = edge_loss(out, gt, nir_mask, 1)
+			loss_edge = 10*edge_loss(out, gt, nir_mask, 1)
 			loss_data = data_loss(out, gt)
 			loss = loss_edge + loss_data
 
